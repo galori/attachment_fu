@@ -46,10 +46,31 @@ module Technoweenie # :nodoc:
             dimensions = size[1..size.size].split("x")
             img.crop_resized!(dimensions[0].to_i, dimensions[1].to_i)
           else
+            geometry = size.scan(/^([^O]*)(O)?$/).first
+            size=geometry.first
             img.change_geometry(size.to_s) { |cols, rows, image| image.resize!(cols<1 ? 1 : cols, rows<1 ? 1 : rows) }
+            img = cut_rounded_corners(img) if geometry.second == "O"
           end
           img.strip! unless attachment_options[:keep_profile]
-          temp_paths.unshift write_to_temp_file(img.to_blob)
+          if geometry and geometry.second == "O"
+            temp_paths.unshift write_to_temp_file(img.to_blob {self.format="PNG"})
+          else
+            temp_paths.unshift write_to_temp_file(img.to_blob)
+          end
+        end
+        
+        def cut_rounded_corners(img)
+          mask = Magick::Image.new(img.columns, img.rows) {self.background_color = 'black'}
+          gc = Magick::Draw.new
+          gc.stroke('white').fill('white')
+          gc.roundrectangle(0, 0, img.columns-1, img.rows-1, 5, 5)
+          gc.draw(mask)
+
+          mask.matte = false
+          img.matte = true
+
+          rounded = img.composite(mask, Magick::CenterGravity, Magick::CopyOpacityCompositeOp)
+          rounded
         end
       end
     end
